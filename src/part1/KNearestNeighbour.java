@@ -16,19 +16,27 @@ import java.util.Map.Entry;
 import java.util.Scanner;
 
 public class KNearestNeighbour {
-	// TODO: make it write results to a file properly
-	// TODO: make it actually classify things
-
-	private String trainingPath = "./data/iris-training.txt"; // file we are using as base
-	private String dataPath = "./data/iris-test.txt"; // file we are applying our learning to
-	// need some means of storing the data
-	// review type of collection later.
-	private final HashMap<Vector<Double>,String> myTrainingData = new HashMap<>();
 	public final int FIELDS;
 	public final int K;
-
+	
+	private final HashMap<Vector<Double>,String> trainingData = new HashMap<>();
 	private final Vector<Double> maxFeatureValues = new Vector<Double>();
 	private final Vector<Double> minFeatureValues = new Vector<Double>();
+	
+	private final String trainingPath; // file we are using as base
+	private final String dataPath; // file we are applying our learning to
+
+	public static void main (String[] input) {
+		if (input.length != 2) {
+			System.err.println("This program requires two parameters, not "+input.length+". The first is a training file and the second is a data file.");
+			System.exit(-1);
+		}
+		int k = 3;
+		int fields = 4;
+		KNearestNeighbour m;
+		m = new KNearestNeighbour(k,fields,input[0],input[1]);
+		m.printData();
+	}
 
 	public KNearestNeighbour(int k, int fields, String trainingPath, String dataPath) {
 		this.trainingPath = trainingPath;
@@ -37,16 +45,10 @@ public class KNearestNeighbour {
 		this.FIELDS = fields;
 		readTrainingFile();
 	}
-	public KNearestNeighbour(int k, int fields) {
-		this.K = k;
-		this.FIELDS = fields;
-		readTrainingFile();
-	}
 
-	/** Reads all information from the paths given when the object was created.	 */
+	/** Reads all information from the paths given when the object was created, populating myTrainingData.	 */
 	public void readTrainingFile() {
 		// first, read the training data into some storage location
-		System.out.println("monolith");
 		try {
 			Scanner s = new Scanner(new File(trainingPath));
 			while (s.hasNext()) {
@@ -68,20 +70,19 @@ public class KNearestNeighbour {
 				for (double d : data) {
 					currentRow.add(d);
 				}
-				myTrainingData.put(currentRow,name);
+				trainingData.put(currentRow,name);
 				//System.out.println(currentRow.toString() +" in "+ name);
 				lineScan.close();
 			}
 			System.out.println("max feature values = "+maxFeatureValues.toString()+"\tmin feature values = "+minFeatureValues.toString());
 			s.close();
 		} catch (FileNotFoundException e) {
-			System.err.println("Training file not found, you should have put tests for this in main.");
-			System.err.println("Attempted to read "+trainingPath+".");
+			System.err.println("Attempted to read "+trainingPath+", but was not found.");
 			System.exit(-1);
 		}
 	}
 
-	/** */
+	/** One of the first called methods which simply updates the max and min feature arrays. */
 	private void updateFeatureRanges(int count, double d) {
 		// first check the minimum values
 		if (count == minFeatureValues.size() && minFeatureValues.size() < FIELDS) {
@@ -99,12 +100,58 @@ public class KNearestNeighbour {
 		}
 	}
 
+	/** Once the training data has been read and the max/min features accounted for, this method
+	 * will read and sort the data in the requested file.  
+	 */
+	public void printData() {
+		if (trainingData.isEmpty()) {
+			System.err.println("Oh no! We have no data.");
+			System.exit(-1);
+		}
+		try {
+			// now let's read our new data
+			Scanner s = new Scanner(new File(dataPath));
+			while (s.hasNextLine()) {
+				Scanner lineScan = new Scanner(s.nextLine());
+				Vector<Double> v = new Vector<Double>();
+				int count = 0;
+				lineScan.useDelimiter("(\\s|,)+");
+				while (lineScan.hasNext()) {
+					if (lineScan.hasNext() && count == FIELDS) {
+						// escape any given classname
+						lineScan.next();
+					} else {
+						// otherwise add this element to the current vector
+						v.addElement(lineScan.nextDouble());
+						count++;
+					}
+				}
+				if (count == 0) {
+					continue;
+				}
+				String lineOut = "";
+				for (Double d : v) {
+					lineOut += d +"   ";
+				}
+				String classed = getClassification(v);
+				lineOut = classed + (classed.length() > 11 ? "\t\t":"   \t\t") + lineOut;
+				System.out.println(lineOut);
+				lineScan.close();
+			}
+			s.close();
+		} catch (FileNotFoundException e) {
+			System.err.println("Data file "+dataPath+" not found.");
+			System.exit(-1);
+		}
+	}
+	
 	/** Reads the data file, line by line, and comparing against the training file. */
+	@Deprecated
 	public void sortData() {
 		Date dateFile = new Date(System.currentTimeMillis());
 		String name = "D"+dateFile.getDay()+"-M"+dateFile.getMonth()
 			+"-at-"+dateFile.getHours()+"-"+dateFile.getMinutes()+"-"+dateFile.getSeconds()+".txt";
-		if (myTrainingData.isEmpty()) {
+		if (trainingData.isEmpty()) {
 			System.err.println("Oh no! We have no data.");
 			System.exit(-1);
 		}
@@ -153,18 +200,19 @@ public class KNearestNeighbour {
 		}
 	}
 
-	/** Requires: size of unseenVector equals size of all map entries */
+	/** Using the populated trainingData array, classifies a given vector.
+	 * Requires: size of unseenVector equals size of all map entries */
 	private String getClassification(Vector<Double> unseenVector) {
-		String classification = "";
-		// we know we have to get K nearest neighbours
 		@SuppressWarnings("unchecked")
-		Entry<Vector<Double>,String>[] bestKValues = new Entry[K];
+		Entry<Vector<Double>,String>[] bestKValues = new Entry[K]; // we know we have to get K nearest neighbours
 		double[] bestKDistances = new double[K]; // and recall the distances between them and our new value(s)
 		Arrays.fill(bestKDistances, Integer.MAX_VALUE);
-		// now we must iterate through our
-		Iterator<Entry<Vector<Double>, String>> iter = myTrainingData.entrySet().iterator();
+		// now we must iterate through them!
+		Iterator<Entry<Vector<Double>, String>> iter = trainingData.entrySet().iterator();
 
-		while (iter.hasNext()) { // now for each element...
+		// first we have to find the distance between each element in the training data and
+		// the given element. 
+		while (iter.hasNext()) { // for each training element...
 			Entry<Vector<Double>,String> currentRow = iter.next();
 			double totalSoFar = 0;
 			// do the (ai-bi)^2/Ri^2 + ... + (an-bn)^2/Rn^2 part
@@ -172,23 +220,21 @@ public class KNearestNeighbour {
 				double diff = (unseenVector.get(i) - currentRow.getKey().get(i));
 				double range = maxFeatureValues.get(i) - minFeatureValues.get(i);
 				totalSoFar += (diff*diff) / (range*range);
-				//System.out.println("\tresult += "+(diff*diff) / (range*range));
 			}
-
-			double distance = Math.sqrt(totalSoFar); // now we have the distance between this vector pair
-
+			double distance = Math.sqrt(totalSoFar); 
+			// now we have the distance between these two vectors, the currentRow and the unseenVector
+			// is this better than any of our current k distances?
 			double formerMostDistantDistance = bestKDistances[0];
 			int mostDistantIndex = -1;
 			for (int i = 0; i < bestKDistances.length; i++) {
 				// if they're exactly the same, we expect the label to be the same
-				// so,
-				if (distance <= bestKDistances[i]
-						&& distance <= formerMostDistantDistance) {
+				if (distance <= bestKDistances[i] && distance <= formerMostDistantDistance) {
 					formerMostDistantDistance = bestKDistances[i];
 					mostDistantIndex = i;
 				}
 			}
-			if (mostDistantIndex > 0 && distance != 0) {
+			// if, then, we have found a smaller distance than one of our existing k values,
+			if (mostDistantIndex >= 0 && distance != 0) {
 //				System.out.println("["+mostDistantIndex+"]: replacing "+ formerMostDistantDistance
 //						+ " with a distance of "+distance+"."
 //						+ ((bestKValues[mostDistantIndex] != null) ? (bestKDistances[mostDistantIndex]+":"+bestKValues[mostDistantIndex].getKey().toString())
@@ -198,57 +244,48 @@ public class KNearestNeighbour {
 				bestKDistances[mostDistantIndex] = distance;
 				bestKValues[mostDistantIndex] = currentRow;
 			}
-		}
+		} // ends trainingData loop
 
 		if (K == 1) {
 			return bestKValues[0].getValue();
 		}
 
-		// now we find the best classification
-		// this seems like horrific overkill unless you want k = 100 or something
-		Entry<Vector<Double>,String> mostCommon = bestKValues[0];
-		int[] countOfClassifier = new int[bestKValues.length];
-		int[] indexOfClassifier = new int[bestKValues.length];
-		Arrays.fill(indexOfClassifier, -1);
+		// now we find the most common class name
+		HashMap<String,Integer> classNameToTotal = new HashMap<>();
 		for (int i = 0; i < bestKValues.length; i++) {
-			for (int j = 0; j <= i; j++) {
-				if (bestKValues[i].equals(bestKValues[j].getValue())) {
-					if (j < i && indexOfClassifier[j] < 1) {
-						indexOfClassifier[i] = j;
-					}
-					countOfClassifier[j]++;
-				}
-
+			Entry<Vector<Double>,String> currentK = bestKValues[i];
+			if (!classNameToTotal.containsKey(currentK.getValue())) {
+				classNameToTotal.put(currentK.getValue(), 1);
+			} else {
+				classNameToTotal.put(currentK.getValue(), classNameToTotal.get(currentK.getValue()) + 1);
 			}
-			System.out.println("you can find "+bestKValues[i].getValue()+" at index "+indexOfClassifier[i]);
 		}
-		return classification;
-	}
-
-	public static void main (String[] input) {
-		String test;
-		String data;
-		int k = 3;
-		int fields = 4;
-		if (input.length < 3 || input.length > 3) {
-			System.err.println("This program requires two parameters, not "+input.length+". The first is a training file and the second is a data file.");
-			//System.exit(-1);
-			System.out.println("\n(But we'll use iris-training and iris-test by default.)");
-			test = "./data/iris-training.txt";
-			data = "./iris-test.txt";
+		String bestClass = null;
+		String[] equals = new String[2];
+		for (Entry<String,Integer> e : classNameToTotal.entrySet()) {
+			if (bestClass == null || e.getValue() > classNameToTotal.get(bestClass)) {
+				bestClass = e.getKey();
+			} else if (e.getValue() == classNameToTotal.get(bestClass)) {
+				if (equals[0] == null) {
+					equals = new String[3];
+					equals[0] = e.getKey();
+					equals[1] = bestClass;
+				} else {
+					if (equals[equals.length-1] != null) {
+						String[] newArr = Arrays.copyOf(equals,equals.length+2);
+						equals = newArr;
+					}
+					equals[equals.length-1] = e.getKey();
+				}
+			} else if (e.getValue() > classNameToTotal.get(bestClass)) {
+				equals = new String[2];
+				bestClass = e.getKey();
+			}
+		}
+		if (equals[0] != null) {
+			return equals[(int)(Math.random() * equals.length)];
 		} else {
-			test = input[1];
-			data = input[2];
+			return bestClass;
 		}
-		// TODO error checking here
-
-		KNearestNeighbour m = new KNearestNeighbour(k,fields,test,data);
-		try {
-			Thread.sleep(200);
-		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		m.sortData();
 	}
 }

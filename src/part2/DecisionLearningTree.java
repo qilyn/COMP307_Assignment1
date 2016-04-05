@@ -12,50 +12,60 @@ import java.util.Set;
 
 public class DecisionLearningTree {
 	private final List<Instance> instances = new ArrayList<Instance>(); // instances in our training data FIXME doesn't need to be a field
-	private List<Instance> data; // contains the instances to be classified
-
 	private final String trainingFile;
 	private final String testFile;
+	
+	private List<Instance> data; // contains the instances to be classified
 	private List<String> attributeNames = new ArrayList<>();
 	private List<String> classifierNames;
+	private TreeNode baselineNode = null;
+	private final TreeNode root; // once calculated, a tree should remember its root node.
 
-	private TreeNode defaultNode = null;
-	private TreeNode root; // once calculated, a tree should remember its root node.
+	public static void main(String[] args) {
+		if (args.length != 2) {
+			System.err.println("This program requires two parameters, not "+args.length+". The first is a training file and the second is a data file.");
+			System.exit(-1);
+		}
+		DecisionLearningTree dt = new DecisionLearningTree(args[0],args[1]);
+		List<String> rs = dt.useBaselineClassifierOnData(); //dt.useTreeOnData();
+		for (String r : rs) {
+			System.out.println(r);
+		}
+		System.out.println("==========================================================");
+		System.out.println("Reporting tree:");
+		dt.report();		
+	}
 
-	/** Initialises a default decision tree over the golf training files.*/
-	public DecisionLearningTree() {
-		trainingFile = "./part3/data/golf-training.dat";
-		testFile = "./part3/data/golf-test.dat";
+	private void report() {
+		((Node)root).report("");
 	}
 
 	/** Initialises a decision tree from the given training and test file URIs. */
 	public DecisionLearningTree(String training, String test) {
 		trainingFile = training;
 		testFile = test;
+		readTrainingFile();
+		root = readDataFile();
 	}
 
 	/** First method for setting up the program. This function is called to fills in the
 	 * attributes and instances for building the decision learning tree.
+	 * Returns the root node of the final learning tree. 
 	 */
-	public void readTrainingFile() {
+	public TreeNode readTrainingFile() {
 		// first, read the training data into some storage location
-		System.err.println("First, we read the training file...");
 		try {
 			Scanner s = new Scanner(new File(trainingFile));
 			// took these lines from helper-code
-		      classifierNames = new ArrayList<String>();
-		      for (Scanner l = new Scanner(s.nextLine()); l.hasNext();) {
-		    	  classifierNames.add(l.next());
-		      }
-		      System.out.println(classifierNames.size() +" categories, "+classifierNames.get(0)+" and "+
-		    	  classifierNames.get(1));
-
+		    classifierNames = new ArrayList<String>();
+		    for (Scanner l = new Scanner(s.nextLine()); l.hasNext();) {
+		    	classifierNames.add(l.next());
+		    }
 			if (attributeNames.size() == 0) {
 				Scanner line = new Scanner(s.nextLine());
 				while (line.hasNext()) {
 					attributeNames.add(line.next());
 				}
-				System.out.println("Read attributes "+attributeNames.toString()+".");
 				line.close();
 			}
 			readFile(s,instances);
@@ -65,13 +75,12 @@ public class DecisionLearningTree {
 			System.err.println("Attempted to read "+trainingFile+".");
 			System.exit(-1);
 		}
-		System.err.println("Done reading training file.");
 		setDefaultNode();
 		ArrayList<Boolean> ar = new ArrayList<Boolean>();
 		for (int i = 0; i < attributeNames.size(); i++) {
 			ar.add(false);
 		}
-		root = BuildTree(instances, ar, 0);
+		return BuildTree(instances, ar);
 	}
 
 	/** The second method to be called, which reads the test data instances.
@@ -79,7 +88,6 @@ public class DecisionLearningTree {
 	 */
 	public TreeNode readDataFile() {
 		data = new ArrayList<Instance>();
-		System.err.println("Reading data file.");
 		try {
 			Scanner s = new Scanner(new File(testFile));
 			// took these lines from helper-code
@@ -87,7 +95,7 @@ public class DecisionLearningTree {
 			for (int i = 0; l.hasNext(); i++) {
 				if (!l.next().equals(classifierNames.get(i))) {
 					System.err.println("This data file does not use the same category names as the training file.");
-					break;
+					System.exit(-1);
 				}
 			}
 			l.close();
@@ -95,7 +103,7 @@ public class DecisionLearningTree {
 			for (int i = 0; l.hasNext(); i++) {
 				if (!l.next().equals(attributeNames.get(i))) {
 					System.err.println("This data file does not match the attributes of the training file.");
-					break;
+					System.exit(-1);
 				}
 			}
 			l.close();
@@ -111,20 +119,17 @@ public class DecisionLearningTree {
 		for (int i = 0; i < attributeNames.size(); i++) {
 			attrs.add(false);
 		}
-		TreeNode hi = BuildTree(instances, attrs, 0);
-		System.err.println("Finished reading data file.");
-		return hi;
+		TreeNode root = BuildTree(instances, attrs);
+		return root;
 	}
 
-	/** Helper function, which continues to read the scanner contents
-	 * into the destination array.
+	/** Helper function, which continues to read the scanner contents into the destination array.
 	 * @param s
 	 * @param dest
 	 * @throws FileNotFoundException
 	 */
 	private void readFile(Scanner s, List<Instance> dest) throws FileNotFoundException {
 		// first, read the training data into some storage location
-		System.err.println("Reading file.");
 		while (s.hasNextLine()) {
 			Scanner line = new Scanner(s.nextLine());
 			if (!line.hasNext()) {
@@ -146,18 +151,24 @@ public class DecisionLearningTree {
 			dest.add(a); // finally, add our example
 			line.close();
 		}
-		System.err.println("Finished reading file.");
 	}
 
 	/** This method sets the default node, to be returned when no more
 	 * instances can be found that match the remaining attributes. */
 	private void setDefaultNode() {
-		System.err.print("Setting default node: ");
-		int[] mostCommon = getMostCommonClassAndTotal(this.instances);
-		defaultNode = new LeafNode( ((double)mostCommon[1]/(double)instances.size()),
-				attributeNames.get(mostCommon[0]));
-		System.out.println(defaultNode.toString());
-		System.out.println();
+		int[] classes = new int[classifierNames.size()];
+		for (Instance i : instances) {
+			classes[i.getCategory()]++;
+		}
+		int mostCommonClassIdx = 0;
+		for (int i = 0; i < classes.length; i++) {
+			if (classes[i] > classes[mostCommonClassIdx]) {
+				mostCommonClassIdx = i;
+			} else if (classes[i] == classes[mostCommonClassIdx]) {
+				mostCommonClassIdx = (Math.random() > 0.5?mostCommonClassIdx:i); // I hope this is an OK implementation of the randomness
+			}
+		}
+		baselineNode = new LeafNode((double)classes[mostCommonClassIdx]/(double)instances.size(), classifierNames.get(mostCommonClassIdx));
 	}
 
 	/**
@@ -176,8 +187,6 @@ public class DecisionLearningTree {
 				largestIndex = i;
 			} else if (classes[i] == classes[largestIndex]) {
 				largestIndex = (Math.random() > 0.5?largestIndex:i); // I hope this is an OK implementation of the randomness
-				// I know it's not a perfectly even chance if we have more than a 2-way tie,
-				// but in all the examples, we've only had binary classification!
 			}
 		}
 		int[] back = {largestIndex,classes[largestIndex]};
@@ -192,14 +201,10 @@ public class DecisionLearningTree {
 	 * 		and where the booleans are only true if the attribute has been used.
 	 * @return the head of the tree.
 	 */
-	private TreeNode BuildTree(List<Instance> instances, List<Boolean> attributes,int depth) {
-		if (depth > 50) {// FIXME this is just debug code
-			throw new IllegalStateException();
-		}
-		System.err.println("Building tree node "+depth+"!");
+	private TreeNode BuildTree(List<Instance> instances, List<Boolean> attributes) {
 		// if instances is empty
 		if (instances.isEmpty()) {
-			return defaultNode;
+			return baselineNode;
 		}
 		// if instances are pure
 		if (isPure(instances)) {
@@ -250,24 +255,60 @@ public class DecisionLearningTree {
 			ArrayList<Boolean> rightArr = new ArrayList<Boolean>();
 			leftArr.addAll(attributes);
 			rightArr.addAll(attributes);
-			TreeNode left = BuildTree(bestInstsTrue, leftArr, depth+1);
-			TreeNode right = BuildTree(bestInstsFalse, rightArr, depth+2);
+			TreeNode left = BuildTree(bestInstsTrue, leftArr);
+			TreeNode right = BuildTree(bestInstsFalse, rightArr);
 			TreeNode me = new Node(attributeNames.get(bestAttrIndex),left,right);
 			return me;
 		}
 	}
-
+	
+	/** The final method! The end of all things!
+	 * That is, the bit that classifies the data. Woohoo.
+	 * @return
+	 */
+	public List<String> useBaselineClassifierOnData() {
+		List<String> classifierWithData = new ArrayList<String>();
+		String header = "LEARND\tACTUAL";
+		for (String s : attributeNames) {
+			char[] truncated = Arrays.copyOf(s.toCharArray(),5);
+			String tr = "";
+			for (int i = 0; i < 5 && Character.isAlphabetic(truncated[i]); i++) {
+				tr += truncated[i];
+			}
+			header += "\t"+ tr +".";
+		}
+		classifierWithData.add(header);
+		if (root == null || attributeNames.size() == 0) {
+			throw new IllegalStateException();
+		}
+		for (Instance inst : data) {
+			String s = baselineNode.classify(inst) +"\t"+ inst.toString();
+			classifierWithData.add(s);
+		}
+		return classifierWithData;
+	}
+	
 	/** The final method! The end of all things!
 	 * That is, the bit that classifies the data. Woohoo.
 	 * @return
 	 */
 	public List<String> useTreeOnData() {
 		List<String> classifierWithData = new ArrayList<String>();
+		String header = "LEARND\tACTUAL";
+		for (String s : attributeNames) {
+			char[] truncated = Arrays.copyOf(s.toCharArray(),5);
+			String tr = "";
+			for (int i = 0; i < 5 && Character.isAlphabetic(truncated[i]); i++) {
+				tr += truncated[i];
+			}
+			header += "\t"+ tr +".";
+		}
+		classifierWithData.add(header);
 		if (root == null || data == null || attributeNames.size() == 0) {
 			throw new IllegalStateException();
 		}
 		for (Instance inst : data) {
-			String s = root.classify(inst) +" "+ inst.toString();
+			String s = root.classify(inst) +"\t"+ inst.toString();
 			classifierWithData.add(s);
 		}
 		return classifierWithData;
@@ -276,7 +317,6 @@ public class DecisionLearningTree {
 	/** calculates the purity of a given node, represented as a set of instances. */
 	public double purity(Iterable<Instance> set) {
 		int size = 0;
-		// TODO this assumes that we have only true/false classification
 		Set<Instance> successNodes = new HashSet<Instance>();
 		Set<Instance> failureNodes = new HashSet<Instance>();
 		for (Instance i : set) {
@@ -311,49 +351,6 @@ public class DecisionLearningTree {
 		return true;
 	}
 
-
-
-
-	/**
-	 *
-	 *
-	 * 		MAIN
-	 *
-	 *
-	 *
-	 * @param args
-	 */
-	public static void main(String[] args) {
-		DecisionLearningTree dt = null;
-		if (args.length == 2)
-			dt = new DecisionLearningTree(args[0],args[1]);
-		else
-			dt = new DecisionLearningTree();
-		dt.readTrainingFile();
-		System.out.flush();
-		System.err.flush();
-		System.out.println("=======================================");
-		TreeNode d = dt.readDataFile();
-		System.out.flush();
-		System.err.flush();
-		System.out.println("=======================================");
-		System.err.println("Printing tree.");
-		((Node)d).report("");
-		System.out.flush();
-		System.err.flush();
-		System.out.println("=======================================");
-//		System.err.println("Printing each node.");
-//		List<String> s = dt.useTreeOnData();
-//		for (String st : s)
-//			System.out.println(st);
-	}
-
-
-
-
-
-
-
 	/** Instances maintain the boolean values of various attributes and the
 	 * resulting class name that was assigned.
 	 */
@@ -379,16 +376,15 @@ public class DecisionLearningTree {
 	      return category;
 	    }
 
-	    @SuppressWarnings("unused")
-		public int getAttributeLength() {
+	    public int getAttributeLength() {
 	    	return vals.length;
 	    }
 
 	    public String toString(){
 	      StringBuilder ans = new StringBuilder(classifierNames.get(category));
-	      ans.append(" ");
+	      ans.append("\t");
 	      for (Boolean val : vals)
-	    	  ans.append(val?"true  ":"false ");
+	    	  ans.append(val?"true\t":"false\t");
 	      return ans.toString();
 	    }
 
