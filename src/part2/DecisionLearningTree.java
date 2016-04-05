@@ -24,8 +24,8 @@ public class DecisionLearningTree {
 
 	/** Initialises a default decision tree over the golf training files.*/
 	public DecisionLearningTree() {
-		trainingFile = "./data/golf-training.dat";
-		testFile = "./data/golf-test.dat";
+		trainingFile = "./part3/data/golf-training.dat";
+		testFile = "./part3/data/golf-test.dat";
 	}
 
 	/** Initialises a decision tree from the given training and test file URIs. */

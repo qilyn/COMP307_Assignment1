@@ -1,0 +1,79 @@
+Reading training data from file hepatitis-training.data
+2 categories
+16 attributes
+Read 100 instances
+Reading test data from file hepatitis-test.data
+Read 37 instances
+live: 24 correct out of 30
+die: 3 correct out of 7
+
+Accuracy: 
+Decision Tree Accuracy: 73%
+Baseline Accuracy (live): 81%
+
+Decision Tree constructed:
+ASCITES = True:
+    SPIDERS = True:
+        VARICES = True:
+            FIRMLIVER = True:
+                Category live, prob = 100% : /49
+            FIRMLIVER = False:
+                BIGLIVER = True:
+                    STEROID = True:
+                        Category live, prob = 100% : /5
+                    STEROID = False:
+                        FEMALE = True:
+                            Category live, prob = 100% : /2
+                        FEMALE = False:
+                            ANTIVIRALS = True:
+                                FATIGUE = True:
+                                    Category die, prob = 100% : /1
+                                FATIGUE = False:
+                                    Category live, prob = 100% : /4
+                            ANTIVIRALS = False:
+                                Category die, prob = 100% : /1
+                BIGLIVER = False:
+                    Category live, prob = 100% : /7
+        VARICES = False:
+            Category die, prob = 100% : /1
+    SPIDERS = False:
+        FIRMLIVER = True:
+            AGE = True:
+                Category live, prob = 100% : /1
+            AGE = False:
+                SGOT = True:
+                    Category live, prob = 100% : /1
+                SGOT = False:
+                    ANTIVIRALS = True:
+                        Category die, prob = 100% : /4
+                    ANTIVIRALS = False:
+                        STEROID = True:
+                            Category live, prob = 100% : /1
+                        STEROID = False:
+                            Category die, prob = 100% : /1
+        FIRMLIVER = False:
+            SGOT = True:
+                BIGLIVER = True:
+                    SPLEENPALPABLE = True:
+                        Category live, prob = 100% : /4
+                    SPLEENPALPABLE = False:
+                        ANOREXIA = True:
+                            Category die, prob = 100% : /2
+                        ANOREXIA = False:
+                            Category live, prob = 100% : /1
+                BIGLIVER = False:
+                    Category die, prob = 100% : /3
+            SGOT = False:
+                Category live, prob = 100% : /10
+ASCITES = False:
+    BIGLIVER = True:
+        STEROID = True:
+            Category die, prob = 100% : /7
+        STEROID = False:
+            ANOREXIA = True:
+                Category die, prob = 100% : /2
+            ANOREXIA = False:
+                Category live, prob = 100% : /2
+    BIGLIVER = False:
+        Category live, prob = 100% : /1
+
