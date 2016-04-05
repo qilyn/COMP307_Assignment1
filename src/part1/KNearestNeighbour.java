@@ -1,22 +1,26 @@
 package part1;
 import java.util.Vector;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.util.ArrayList;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Arrays;
-import java.util.Collection;
+import java.util.Date;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map.Entry;
 import java.util.Scanner;
-import java.util.Set;
 
 public class KNearestNeighbour {
-	@SuppressWarnings("unused")
-	private final File trainingFile; // file we are using as base
-	@SuppressWarnings("unused")
-	private final File dataFile; // file we are applying our learning to
+	// TODO: make it write results to a file properly
+	// TODO: make it actually classify things
+
+	private String trainingPath = "./data/iris-training.txt"; // file we are using as base
+	private String dataPath = "./data/iris-test.txt"; // file we are applying our learning to
 	// need some means of storing the data
 	// review type of collection later.
 	private final HashMap<Vector<Double>,String> myTrainingData = new HashMap<>();
@@ -26,9 +30,14 @@ public class KNearestNeighbour {
 	private final Vector<Double> maxFeatureValues = new Vector<Double>();
 	private final Vector<Double> minFeatureValues = new Vector<Double>();
 
-	public KNearestNeighbour(int k, int fields, String learningPath, String applyingPath) {
-		trainingFile = new File(learningPath);
-		dataFile = new File(applyingPath);
+	public KNearestNeighbour(int k, int fields, String trainingPath, String dataPath) {
+		this.trainingPath = trainingPath;
+		this.dataPath = dataPath;
+		this.K = k;
+		this.FIELDS = fields;
+		readTrainingFile();
+	}
+	public KNearestNeighbour(int k, int fields) {
 		this.K = k;
 		this.FIELDS = fields;
 		readTrainingFile();
@@ -39,7 +48,7 @@ public class KNearestNeighbour {
 		// first, read the training data into some storage location
 		System.out.println("monolith");
 		try {
-			Scanner s = new Scanner(trainingFile);
+			Scanner s = new Scanner(new File(trainingPath));
 			while (s.hasNext()) {
 				Scanner lineScan = new Scanner(s.nextLine());
 				double data[] = new double[FIELDS];
@@ -67,7 +76,7 @@ public class KNearestNeighbour {
 			s.close();
 		} catch (FileNotFoundException e) {
 			System.err.println("Training file not found, you should have put tests for this in main.");
-			System.err.println("Attempted to read "+trainingFile.getAbsolutePath()+".");
+			System.err.println("Attempted to read "+trainingPath+".");
 			System.exit(-1);
 		}
 	}
@@ -92,15 +101,24 @@ public class KNearestNeighbour {
 
 	/** Reads the data file, line by line, and comparing against the training file. */
 	public void sortData() {
+		Date dateFile = new Date(System.currentTimeMillis());
+		String name = "D"+dateFile.getDay()+"-M"+dateFile.getMonth()
+			+"-at-"+dateFile.getHours()+"-"+dateFile.getMinutes()+"-"+dateFile.getSeconds()+".txt";
 		if (myTrainingData.isEmpty()) {
 			System.err.println("Oh no! We have no data.");
 			System.exit(-1);
 		}
 		try {
-			Scanner s = new Scanner(dataFile);
+			System.out.println("Path");
+			try {
+				Files.createDirectory(Paths.get("results"));
+			} catch (FileAlreadyExistsException e) {
+
+			}
+			Scanner s = new Scanner(new File(dataPath));
 			while (s.hasNextLine()) {
 				Scanner lineScan = new Scanner(s.nextLine());
-				Vector v = new Vector();
+				Vector<Double> v = new Vector<Double>();
 				int count = 0;
 				while (lineScan.hasNext()) {
 					// this is necessary if we are testing against training files!
@@ -111,19 +129,35 @@ public class KNearestNeighbour {
 						count++;
 					}
 				}
-				String classification = getClassification(v);
+				String lineOut = "";
+				for (Double d : v) {
+					lineOut += d +"\t";
+				}
+				lineOut += getClassification(v) +"\n";
+				try {
+					BufferedWriter writer = Files.newBufferedWriter(Paths.get("results/"+name),Charset.forName("US-ASCII"));
+						writer.write(lineOut);
+				} catch (IOException x) {
+					System.err.println("IOException.");
+				}
+				lineScan.close();
 			}
+			s.close();
 		} catch (FileNotFoundException e) {
 			System.err.println("Data file not found, you should have put tests for this in main.");
-			System.err.println("Attempted to read "+dataFile.getAbsolutePath()+".");
+			System.err.println("Attempted to read "+dataPath+".");
 			System.exit(-1);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
 	}
 
 	/** Requires: size of unseenVector equals size of all map entries */
 	private String getClassification(Vector<Double> unseenVector) {
-		String classification;
+		String classification = "";
 		// we know we have to get K nearest neighbours
+		@SuppressWarnings("unchecked")
 		Entry<Vector<Double>,String>[] bestKValues = new Entry[K];
 		double[] bestKDistances = new double[K]; // and recall the distances between them and our new value(s)
 		Arrays.fill(bestKDistances, Integer.MAX_VALUE);
@@ -154,36 +188,61 @@ public class KNearestNeighbour {
 					mostDistantIndex = i;
 				}
 			}
-			if (mostDistantIndex >= 0) {
-				System.out.println("["+mostDistantIndex+"]: replacing "+ formerMostDistantDistance
-						+ " with a distance of ["+distance+"]"
+			if (mostDistantIndex > 0 && distance != 0) {
+//				System.out.println("["+mostDistantIndex+"]: replacing "+ formerMostDistantDistance
+//						+ " with a distance of "+distance+"."
 //						+ ((bestKValues[mostDistantIndex] != null) ? (bestKDistances[mostDistantIndex]+":"+bestKValues[mostDistantIndex].getKey().toString())
 //								: "null")
 //						+" is replaced by "+distance+":"+currentRow.getKey().toString()
-						);
+//						);
 				bestKDistances[mostDistantIndex] = distance;
 				bestKValues[mostDistantIndex] = currentRow;
 			}
 		}
-		return null;
+
+		if (K == 1) {
+			return bestKValues[0].getValue();
+		}
+
+		// now we find the best classification
+		// this seems like horrific overkill unless you want k = 100 or something
+		Entry<Vector<Double>,String> mostCommon = bestKValues[0];
+		int[] countOfClassifier = new int[bestKValues.length];
+		int[] indexOfClassifier = new int[bestKValues.length];
+		Arrays.fill(indexOfClassifier, -1);
+		for (int i = 0; i < bestKValues.length; i++) {
+			for (int j = 0; j <= i; j++) {
+				if (bestKValues[i].equals(bestKValues[j].getValue())) {
+					if (j < i && indexOfClassifier[j] < 1) {
+						indexOfClassifier[i] = j;
+					}
+					countOfClassifier[j]++;
+				}
+
+			}
+			System.out.println("you can find "+bestKValues[i].getValue()+" at index "+indexOfClassifier[i]);
+		}
+		return classification;
 	}
 
 	public static void main (String[] input) {
 		String test;
 		String data;
+		int k = 3;
+		int fields = 4;
 		if (input.length < 3 || input.length > 3) {
 			System.err.println("This program requires two parameters, not "+input.length+". The first is a training file and the second is a data file.");
 			//System.exit(-1);
-			System.out.println("\n(But we'll just use iris-training and iris-test anyway, because clearly this is a work in progress.)");
-			test = "/home/mckayvick/COMP 307/1/part1/iris-training.txt";
-			data = "/home/mckayvick/COMP 307/1/part1/iris-test.txt";
+			System.out.println("\n(But we'll use iris-training and iris-test by default.)");
+			test = "./data/iris-training.txt";
+			data = "./iris-test.txt";
 		} else {
 			test = input[1];
 			data = input[2];
 		}
 		// TODO error checking here
 
-		KNearestNeighbour m = new KNearestNeighbour(3,4,test,data);
+		KNearestNeighbour m = new KNearestNeighbour(k,fields,test,data);
 		try {
 			Thread.sleep(200);
 		} catch (InterruptedException e) {
