@@ -19,44 +19,38 @@ public class Perceptron {
 	public static final double DEFAULT_WEIGHT = 0.2;
 	public static final String TRUE_CLASS = "#Yes";
 	public static final double LEARNING_RATE = 0.5;
-//	private final List<Feature> featureX = new ArrayList<Feature>();
-//	private HashMap<Image,String> trainingData;
-	private List<Image> data;
+	public static final long DEFAULT_SEED = 1022119542;
+	
 	private List<Feature> features;
+	private String trainingFile = "./src/part3/data/image.data";
 	private int w;
 	private int h;
-
-	private String trainingFile = "./src/part3/data/image.data";
+	
 	List<String> classifierNames;
 
 	public static void main(String[] args) {
 		Perceptron p = null;
-		if (args.length == 2)
-			p = new Perceptron(args[0],args[1]);
-		else
-			p = new Perceptron();
-		p.readImageFiles();
+		if (args.length == 1)
+			p = new Perceptron(args[0]);
+		else {
+			System.err.println("The perceptron requires a training file as an argument.");
+			System.exit(-1);
+		}
+		p.constructAndRunPerceptron();
 	}
 
 	public Perceptron() {
-		doWork();
+		readImageFiles();
 	}
 
-	public Perceptron(String training, String test) {
+	public Perceptron(String training) {
 		trainingFile = training;
-//		testFile = test;
-
-		doWork();
+		readImageFiles();
 	}
 	
-	private void doWork() {
-		System.err.println("First, we read the images...");
+	private void constructAndRunPerceptron() {
 		HashMap<Image,String> images = readImageFiles();
-		System.err.println("Done reading image file.");
-		System.err.println("Now we construct the feature list...");
 		features = constructFeatures(50, 0);
-		// FIXME well we aren't including the dummy feature, 'cause we're dummies and idk what one is
-		System.err.println("Done feature analysis, so let's run the perceptron algorithm!");
 		trainPerceptron(images);
 		// recall: each input has a weight
 		// each neuron has an output based on the sum product of all input + weight
@@ -88,14 +82,14 @@ public class Perceptron {
 					}
 				}
 				if (sumTriggeredWeights > 0 && !img.className.equals(TRUE_CLASS)) {
-					// if we fire and it's not true, decrement weight
+					// if we fire and it's not true, decrement all feature weights
 					for (Feature f : features) {
 						double newWeight = f.getWeight() + 
 								LEARNING_RATE * f.getWeight() - 1;
 						f.setWeight(newWeight);
 					}
 				} else if (sumTriggeredWeights <= 0 && img.className.equals(TRUE_CLASS)) {
-					// if we don't fire and we should have, increment weight
+					// if we don't fire and we should have, increment all feature weight
 					for (Feature f : features) {
 						double newWeight = f.getWeight() + 
 								LEARNING_RATE * f.getWeight() + 1;
@@ -108,9 +102,10 @@ public class Perceptron {
 			epoch++;
 		}
 		if (epoch == 1000) {
-			System.out.println("Done learning because we hit the max. "+correctImages);
-		} if (correctImages == knownImages.size()) {
-			System.out.println("Done because we learned all "+knownImages.size()+" features in "+epoch+" steps");
+			System.out.println("Finished learning because we hit the maximum number of repetitions.");
+		}
+		if (correctImages == knownImages.size()) {
+			System.out.println("Finished learning because we learned all "+knownImages.size()+" features in "+epoch+" steps");
 		}
 		printResult(knownImages);
 	}
@@ -127,10 +122,10 @@ public class Perceptron {
 				}
 			}
 			if (sumTriggeredWeights > 0 && !img.className.equals(TRUE_CLASS)) {
-				System.out.println("Image["+count+"] = "+sumTriggeredWeights+" but should be <0");
+				System.err.println("Image["+count+"] was triggered ("+sumTriggeredWeights+") but the class is not true.");
 				totalWrong++;
 			} else if (sumTriggeredWeights <= 0 && img.className.equals(TRUE_CLASS)) {
-				System.out.println("Image["+count+"] = "+sumTriggeredWeights+" but should be >0");
+				System.err.println("Image["+count+"] was not triggered ("+sumTriggeredWeights+") but the class is true.");
 				totalWrong++;
 			}
 			count++;
@@ -165,36 +160,36 @@ public class Perceptron {
 			String st = s.nextLine();
 			if (st.charAt(0) != 'P' || st.charAt(1) != '1') return;
 		}
-		Scanner l = new Scanner(s.nextLine());
-		String imgClass = l.next();
-		l = new Scanner(s.nextLine());
-		String string = s.nextLine();
-		w = l.nextInt();
-		h = l.nextInt();
+		// read class (comment)
+		Scanner scanLine = new Scanner(s.nextLine());
+		String imgClass = scanLine.next();
+		scanLine.close();
+		// read dimensions
+		scanLine = new Scanner(s.nextLine());
+		w = scanLine.nextInt();
+		h = scanLine.nextInt();
 		boolean[][] img = new boolean[w][h];
 		int x = 0;
 		int y = 0;
-		while (x+y*h < w*h-1) {
-			string = s.nextLine();
-			Scanner line = new Scanner(string);
-			line.useDelimiter("");
-			while (line.hasNextInt() && x+y*h < w*h-1) {
-//				while (!line.hasNextInt() && line.hasNext()) {
-//					line.next();
-//				}
-				img[x][y] = line.nextInt()==1;
+		// read pixel values
+		while (x+y*h < w*h-1 && s.hasNextLine()) {
+			scanLine = new Scanner(s.nextLine());
+			scanLine.useDelimiter("");
+			while (scanLine.hasNextInt() && x+y*h < w*h-1) {
+				img[x][y] = scanLine.nextInt()==1;
 				if (x == w-1 && y < h) {
 					y++;
 					x = 0;
 				}
 				x++;
 			}
-			line.close();
+			scanLine.close();
 		}
 		destination.put(new Image(img,imgClass),imgClass);
 	}
 
 	/** This method takes a total number of features and a seed, then returns a list of num Features.
+	 * If passed a seed of 0, uses DEFAULT_SEED instead. 
 	 * @param num Number of instances to fill featureX with; requires at least 50.
 	 * @param seed Seed for the RNG. 
 	 */
@@ -205,8 +200,8 @@ public class Perceptron {
 			num = 50;
 		}
 		if (seed == 0) {
-			System.err.println("Using a random seed.");
-			seed = new Random().nextLong();
+			System.err.println("Parameter seed = 0. Using the default seed.");
+			seed = DEFAULT_SEED;
 		}
 
 		Random r = new Random(seed);
@@ -265,7 +260,6 @@ public class Perceptron {
 		
 		private double weight;
 
-		// 5 = k means clustering
 		Feature(int[] row, int[] col, boolean[] sgn, double weight) {
 			this.row = row;
 			this.col = col;
